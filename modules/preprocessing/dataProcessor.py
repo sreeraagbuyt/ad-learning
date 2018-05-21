@@ -9,9 +9,10 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 
 
 class DataProcessor:
-    def __init__(self, label, id_="client_id"):
+    def __init__(self, label, id_="client_id", skipcols=None):
         self.id_ = id_
         self.label = label
+        self.skipcols = skipcols if skipcols else []
         warnings.filterwarnings("ignore")
 
 
@@ -42,7 +43,7 @@ class DataProcessor:
         """
         drop_cols = []
         for col in df:
-            if col == self.id_ or col == self.label:
+            if col == self.id_ or col == self.label or col in self.skipcols:
                 continue
 
             ratio_nan = float(df[col].isnull().sum())/float(df[col].shape[0])
@@ -69,7 +70,7 @@ class DataProcessor:
 
         bool_cols, categorical_cols, continuous_cols = [],[],[]
         for col in df.columns:
-            if col == self.id_ or col == self.label:
+            if col == self.id_ or col == self.label or col in self.skipcols:
                 continue
             elif df[col].dropna().value_counts().index.isin([0,1]).all():
                     bool_cols.append(col)
@@ -81,7 +82,7 @@ class DataProcessor:
         return bool_cols, categorical_cols, continuous_cols
 
 
-    def handle_missing_values(self, df, threshold_missing=0.4):
+    def handle_missing_values(self, df, threshold_missing=0.4, drop_records=True):
         """ Accepts a df and handles missing values by dropping col/rows containing NA's above a given threshold and replacing na's 
         
         Args:
@@ -93,13 +94,13 @@ class DataProcessor:
 
         """
         threshold_missing = float(threshold_missing)/100. if threshold_missing > 1 else threshold_missing
-        
-        print("Processing rows...")
-        df = self.drop_dubious_rows(df, threshold_missing)
-        print(df.shape)
-        print("Processing columns...")
-        df = self.drop_columns_below_thresh(df, threshold_missing)
-        print(df.shape)
+        if drop_records:
+            print("Processing rows...")
+            df = self.drop_dubious_rows(df, threshold_missing)
+            print(df.shape)
+            print("Processing columns...")
+            df = self.drop_columns_below_thresh(df, threshold_missing)
+            print(df.shape)
         print("Seggregating columns ===> bool, categorical, continuous")
         bool_cols, categorical_cols, continuous_cols = self.seggregate_columns_by_type(df)
         print("Replacing NA's")
@@ -132,12 +133,12 @@ class DataProcessor:
         print("Finding Categorical columns")
 
         for col in df.columns:
-            if df[col].dtype.name == 'object' and not(col == self.id_ or col == self.label):
+            if df[col].dtype.name == 'object' and not(col == self.id_ or col == self.label or col in self.skipcols):
                 categorical_cols.append(col)
         
         print("Encoding...")
         for col in categorical_cols:
-            df[col] = df[col].apply(lambda x: x.lower())
+            df[col] = df[col].apply(lambda x: x.strip().lower())
             df = pd.concat([df, pd.get_dummies(df[col])], axis=1)
 
             try:
@@ -207,7 +208,11 @@ class DataProcessor:
 
         """
         for col in list(df.loc[:,start_label:end_label].columns.values):
-            df[col] = df[col]/scaler
+            try:
+                df[col].astype(float)
+                df[col] = df[col]/scaler
+            except:
+                pass
         return df
 
 
@@ -311,10 +316,10 @@ class DataProcessor:
         
         df_pointer = pd.read_csv(path, header=0, chunksize=chunksize)
         df = self.apply_pca(df_pointer, start_index, end_index, ipca, components)
-        return df
+        return df, ipca
 
 
-    def apply_pca(self, df_pointer, start_index, end_index, ipca, components):            
+    def apply_pca(self, df_pointer, start_index, end_index, ipca, components, chunk=True):            
         """ Accepts a df_pointer and reduces dimensionality of each chunk using pre-trained PCA
              
             Args:
@@ -327,12 +332,17 @@ class DataProcessor:
              Returns:
      
         """
-        for idx, df in enumerate(df_pointer):
-            print("Transforming Chunk %d"%(idx))
-            temp_df = pd.DataFrame(ipca.transform(df.iloc[:,start_index:end_index]), columns=['pca%i' % i for i in range(components)],
-                    index=df.index)            
-            temp_df = pd.concat([df.iloc[:,:start_index],temp_df, df.iloc[:,end_index:]],axis=1)
-            reduced_df = temp_df if idx == 0 else pd.concat([reduced_df, temp_df])
+        if chunk:
+            for idx, df in enumerate(df_pointer):
+                print("Transforming Chunk %d"%(idx))
+                temp_df = pd.DataFrame(ipca.transform(df.iloc[:,start_index:end_index]), columns=['pca%i' % i for i in range(components)],
+                        index=df.index)            
+                temp_df = pd.concat([df.iloc[:,:start_index],temp_df, df.iloc[:,end_index:]],axis=1)
+                reduced_df = temp_df if idx == 0 else pd.concat([reduced_df, temp_df])
+        else:
+	    temp_df = pd.DataFrame(ipca.transform(df_pointer.iloc[:,start_index:end_index]), columns=['pca%i' % i for i in range(components)],
+                        index=df_pointer.index)
+            reduced_df = pd.concat([df_pointer.iloc[:,:start_index],temp_df, df_pointer.iloc[:,end_index:]],axis=1)
             
         return reduced_df
 

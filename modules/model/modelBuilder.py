@@ -9,17 +9,21 @@ import yaml
 class ModelBuilder:
     def __init__(self, train_test_split=0.2):
         conf = yaml.load(open("/home/buyt-app/ad_learning/conf/config.learning.yml"))['PATHS']
-        self.split = 0.2 
+        self.split = 0.20 
         self.threshold_range = map(lambda x: x / 100.0, range(0, 101, 1))
         self.report_path = conf['REPORT_PATH']
         self.model_path = conf['MODEL_PATH']
         self.predictions_path = conf['PREDICTIONS_PATH']
 
 
-    def get_features_labels(self, df):
+    def get_features_labels(self, df, generate=False):
         dataset = df.as_matrix()
+        if generate:
+            features = dataset[:, :]
+            return features
         features = dataset[:, :-1]
         labels = dataset[:, features.shape[1]:].ravel()
+        labels = labels.astype(int)
         return features, labels
 
 
@@ -75,9 +79,10 @@ class ModelBuilder:
         for idx,df in enumerate(df_pointer):
             features, labels = self.get_features_labels(df)
             X_train, X_test, y_train, y_test = train_test_split(features, labels, test_size=self.split, random_state=42)
+            X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=self.split, random_state=1)
             dtrain = xgb.DMatrix(X_train[:,1:], label=y_train)
             dtest = xgb.DMatrix(X_test[:,1:])
-
+            deval = xgb.DMatrix(X_val[:,1:], label=y_val)
             test_set = X_test if test_set is None else np.append(test_set, X_test, axis=0)
             test_labels = y_test if test_labels is None else np.append(test_labels, y_test, axis=0)
 
@@ -86,7 +91,7 @@ class ModelBuilder:
             elif ml_algo == 'logistic':
                 param = {'max_depth':5, 'eta':0.02, 'silent':1, 'objective':'binary:logistic', 'eval_metric':'logloss', 'max_delta_step':4, 'scale_pos_weight': scale_pos}
 
-            watchlist  = [(dtrain,'train')]
+            watchlist  = [(deval,'eval')]
             num_round = n_iter
             early_stopping_rounds = early_stop
             
@@ -99,7 +104,6 @@ class ModelBuilder:
             bst.save_model(xgb_model)
             y_pred = bst.predict(dtest)
             mu.save_metrics(y_test, y_pred, model_name)
-
         y_pred = bst.predict(xgb.DMatrix(test_set[:,1:]))
         mu.save_metrics(test_labels, y_pred, model_name)
         self.generate_report(len(X_train), len(X_test), tot, model_name, y_pred, test_labels)
@@ -143,7 +147,7 @@ class ModelBuilder:
         return model
 
 
-    def generate_results_pretrained(self, df, model, model_name, prob=False):
+    def generate_results_pretrained(self, df, model, model_name, prob=False, gender=False):
  	""" Accepts a df and trained model object and predicts class label
         
         Args:
@@ -155,7 +159,7 @@ class ModelBuilder:
 
         """
 
-        features, labels = self.get_features_labels(df)
+        features = self.get_features_labels(df, generate=True)
         if prob:
             try:
                 y_pred = model.predict_proba(features[:, 1:])[:, 1:].ravel()
@@ -166,5 +170,7 @@ class ModelBuilder:
         
         clids = list(features[:, :1].astype(int).ravel())
         y_pred = list(y_pred)
+        if gender:
+            y_pred = ['F' if y_p > 0.5 else 'M' for y_p in y_pred]
         mu.save_predictions_against_clid(self.predictions_path+"/"+model_name, clids, y_pred)
 

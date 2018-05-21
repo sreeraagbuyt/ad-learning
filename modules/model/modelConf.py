@@ -25,7 +25,7 @@ ml_models["dtr"] = [DecisionTreeRegressor(), "DTR", False]
 ml_models["svr"] = [svm.LinearSVR(), "SVR", False]
 ml_models["sgdr"] = [SGDRegressor(), "SDGR", False]
 ml_models["rfr"] = [RandomForestRegressor(n_estimators=60, n_jobs=-1), "RFR", False]
-ml_models["lr"] = [LogisticRegression( class_weight={0:.5, 1:.5}), "LR", True]
+ml_models["lr"] = [LogisticRegression( class_weight={0:.15, 1:.85}, random_state=42), "LR", True]
 ml_models["gbr"] = [GradientBoostingRegressor(n_estimators=100, learning_rate=0.1, max_depth=None, random_state=0,
                                               loss='ls'), "GBR", False]
 
