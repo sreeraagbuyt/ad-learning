@@ -61,7 +61,7 @@ class ModelBuilder:
         return model
 
 
-    def train_xgb(self, df_pointer, model_name, ml_algo="logistic", scale_pos=8, n_iter=50, early_stop=20):
+    def train_xgb(self, df_pointer, model_name, ml_algo="logistic", scale_pos=8, n_iter=50, early_stop=20, params={}):
 	""" Accepts a df and trains model and generates reports for test data
         
         Args:
@@ -89,7 +89,10 @@ class ModelBuilder:
             if ml_algo == 'linear':
                 param = {'max_depth':5, 'eta':0.02, 'silent':1, 'objective':'reg:linear' }
             elif ml_algo == 'logistic':
-                param = {'max_depth':5, 'eta':0.02, 'silent':1, 'objective':'binary:logistic', 'eval_metric':'logloss', 'max_delta_step':4, 'scale_pos_weight': scale_pos}
+                if len(params) > 0:
+                    param = params
+                else:
+                    param = {'max_depth':5, 'eta':0.02, 'silent':1, 'objective':'binary:logistic', 'eval_metric':'logloss', 'max_delta_step':4, 'scale_pos_weight': scale_pos}
 
             watchlist  = [(deval,'eval')]
             num_round = n_iter

@@ -138,6 +138,7 @@ class DataProcessor:
         
         print("Encoding...")
         for col in categorical_cols:
+            df[col] = df[col].astype(str)
             df[col] = df[col].apply(lambda x: x.strip().lower())
             df = pd.concat([df, pd.get_dummies(df[col])], axis=1)
 
